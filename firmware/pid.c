@@ -9,7 +9,7 @@ const double SCALE = 50.0;
 const uint32_t PRINT_INTERVAL_MS = 100; // Increased to 100ms to prevent UART lag affecting PID
 
 // --- PID Configuration ---
-const int16_t SETPOINT = 300; 
+int16_t SETPOINT = 300; 
 const uint16_t MAX_COUNT = 511; 
 const uint16_t MIN_COUNT = 0;
 
@@ -60,19 +60,64 @@ uint16_t adc_read(){
     return (ADC);
 }
 
+
+void check_serial_command() {
+    if (UCSR0A & _BV(RXC0)) {
+        char cmd_type = getchar();
+        
+        // Safety check: Ignore newlines/returns sent alone
+        if(cmd_type == '\n' || cmd_type == '\r') return;
+
+        // Simple buffer to hold the number part
+        char buffer[16];
+        uint8_t i = 0;
+        
+        // Read characters until newline or buffer full
+        // Note: This is a tiny "blocking" loop but very fast for short commands
+        while(1) {
+            // Wait for next character (with timeout ideally, but keep simple for now)
+            while (!(UCSR0A & _BV(RXC0))); 
+            
+            char c = getchar();
+            if (c == '\n' || c == '\r') {
+                buffer[i] = '\0'; // Null-terminate string
+                break;
+            }
+            if (i < 15) {
+                buffer[i++] = c;
+            }
+        }
+
+        float val = atof(buffer);
+
+
+        switch(cmd_type) {
+            case 'S': 
+                SETPOINT = (int16_t)val; 
+                // Clamp immediately to keep safe
+                if(SETPOINT > 1023) SETPOINT = 1023;
+                if(SETPOINT < 0) SETPOINT = 0;
+                break;
+            case 'P': Kp = val; break;
+            case 'I': Ki = val; break;
+            case 'D': Kd = val; break;
+        }
+    }
+}
+
+
 // --- Printing ---
 void print_status(uint32_t time, uint16_t sample, float output) {
     double volts = ((double)sample * 3.3) / 1024.0;
     char volt_string[8];
     dtostrf(volts, 6, 4, volt_string);
     
-    // Print Voltage and PWM output to diagnose "stuck" issues
-    printf("%06lu | V:%s | PWM:%3d | ", time, volt_string, (int)output);
-    
-    int length = (int)(volts * 50); 
-    for(int i = 0; i < length; i++) printf("-");
-    printf("*\n");
+    // Minimalist format to save UART bandwidth
+    // Old: "%06lu | V:%s | PWM:%3d | --------*"
+    // New: "TIME|V|PWM"
+    printf("%lu|%s|%d\n", time, volt_string, (int)output);
 }
+
 
 int main(void) {
     DDRB |= _BV(PINB7); 
@@ -99,6 +144,8 @@ int main(void) {
     uint32_t last_print_time = 0;
 
     while (1) {
+        check_serial_command();
+
         uint32_t current_time = get_time_ms();
 
         if (current_time - last_pid_time >= PID_INTERVAL_MS) {
