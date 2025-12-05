@@ -5,6 +5,7 @@ import serial
 import serial.tools.list_ports
 import time
 import collections
+from waveform_window import WaveformWindow
 
 # Global Theme Settings
 ctk.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
@@ -20,7 +21,7 @@ class PIDControllerGUI:
         # Serial Connection
         self.serial_port = None
         self.is_connected = False
-        self.data_buffer = collections.deque(maxlen=200) 
+        self.data_buffer = collections.deque(maxlen=200) #Max voltage values is 200
 
         # GUI Layout
         self._setup_connection_frame()
@@ -59,6 +60,9 @@ class PIDControllerGUI:
         self.status_lbl = ctk.CTkLabel(inner_frame, text="Status: Disconnected", text_color="red")
         self.status_lbl.pack(side="left", padx=10)
 
+        self.waveformButton = ctk.CTkButton(inner_frame, text="Draw Waveform", command=self.open_waveform_window)
+        self.waveformButton.pack(side = "left", padx = 10)
+
     def _setup_control_frame(self):
         frame = ctk.CTkFrame(self.root)
         frame.pack(fill="x", padx=10, pady=5)
@@ -66,24 +70,24 @@ class PIDControllerGUI:
         # Section Title
         ctk.CTkLabel(frame, text="PID Controls", font=("Roboto", 12, "bold")).grid(row=0, column=0, columnspan=10, sticky="w", padx=10, pady=(5,5))
 
-        # Setpoint Control
+        # Voltage Control
         # Note: CTk width is in pixels, not characters. Adjusted accordingly.
-        ctk.CTkLabel(frame, text="Target (0-1023):").grid(row=1, column=0, padx=5, pady=5)
+        ctk.CTkLabel(frame, text="Target Voltage (0-3.3V):").grid(row=1, column=0, padx=5, pady=5)
 
         slider_container = ctk.CTkFrame(frame, fg_color="transparent") #Transparent box that fits both the slider and slider value
         slider_container.grid(row=1, column=1, padx=5, pady=5)
 
         def slider_event(value):
-            self.value_label.configure(text=str(int(value)))
+            self.value_label.configure(text=f"{value:.2f}") #2 DP for voltage setpoint label
 
         # 1. The Value Label (Packed Top)
-        self.value_label = ctk.CTkLabel(slider_container, text="0", font=("Roboto", 14, "bold"))
+        self.value_label = ctk.CTkLabel(slider_container, text="0.96", font=("Roboto", 14, "bold"))
         self.value_label.pack(side="top", pady=(0, 2))
 
         # 2. The Slider (Packed Bottom)
-        self.ent_setpoint = ctk.CTkSlider(slider_container, from_=0, to=1024, number_of_steps=1024, command=slider_event)
-        self.ent_setpoint.set(0) # Ensure slider and label match start values
-        self.ent_setpoint.pack(side="top")
+        self.ent_voltage = ctk.CTkSlider(slider_container, from_=0, to=3.3, command=slider_event)
+        self.ent_voltage.set(0.96) # Ensure slider and label match start values
+        self.ent_voltage.pack(side="top")
         
         ctk.CTkButton(frame, text="Set Target", width=100, command=self.send_setpoint).grid(row=1, column=2, padx=5, pady=5)
         
@@ -104,6 +108,17 @@ class PIDControllerGUI:
         self.ent_kd.grid(row=1, column=8, padx=5)
 
         ctk.CTkButton(frame, text="Update Gains", width=100, command=self.send_gains).grid(row=1, column=9, padx=10)
+
+        
+
+
+    def open_waveform_window(self):
+        if not self.is_connected:
+            messagebox.showwarning("Warning", "Connect to the board first!")
+            return
+        # Open the new window
+        WaveformWindow(self.root, self.serial_port)
+
 
     def _setup_visualization_frame(self):
         frame = ctk.CTkFrame(self.root)
@@ -189,8 +204,7 @@ class PIDControllerGUI:
             self.canvas.create_line(points, fill="#00ff00", width=2)
             
             try:
-                sp = int(self.ent_setpoint.get())
-                sp_v = (sp * 3.3) / 1024
+                sp_v = self.ent_voltage.get()
                 y_sp = h - ((sp_v / max_v) * h)
                 self.canvas.create_line(0, y_sp, w, y_sp, fill="red", dash=(4, 4))
             except:
@@ -199,10 +213,15 @@ class PIDControllerGUI:
     def send_setpoint(self):
         if self.is_connected:
             try:
-                val = int(self.ent_setpoint.get())
-                cmd = f"S{val}\n"
+                voltage_input = float(self.ent_voltage.get())
+                if voltage_input < 0: voltage_input = 0
+                if voltage_input > 3.3: voltage_input = 3.3
+                
+                adc_value = int((voltage_input / 3.3) * 1023) #Convert setpoint voltage to adc
+                cmd = f"S{adc_value}\n"
                 print(f"DEBUG: Sending '{cmd.strip()}'")
                 self.serial_port.write(cmd.encode())
+
             except ValueError:
                 messagebox.showerror("Error", "Setpoint must be an integer")
 
