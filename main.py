@@ -8,32 +8,29 @@ import collections
 from waveform_window import WaveformWindow
 
 # Global Theme Settings
-ctk.set_appearance_mode("Dark")  # Modes: "System" (standard), "Dark", "Light"
-ctk.set_default_color_theme("blue")  # Themes: "blue" (standard), "green", "dark-blue"
+ctk.set_appearance_mode("Dark") 
+ctk.set_default_color_theme("blue")  
 
 class PIDControllerGUI:
     def __init__(self):
-        # Change root to CTk
         self.root = ctk.CTk()
         self.root.title("PID Controller Interface")
-        self.root.geometry("900x650") # Increased slightly for comfortable spacing
+        self.root.geometry("900x650") #Window dimensions
 
         # Serial Connection
         self.serial_port = None
         self.is_connected = False
-        self.data_buffer = collections.deque(maxlen=200) #Max voltage values is 200
+        self.data_buffer = collections.deque(maxlen=200) #Max voltage values is 200 
 
         # GUI Layout
         self._setup_connection_frame()
         self._setup_control_frame()
         self._setup_visualization_frame()
 
-        # Start Serial Polling Loop
-        self.root.after(10, self._read_serial)
+        # Start Serial Polling Loop, reads value every 10ms
+        self.root.after(10, self._read_serial) 
 
     def _setup_connection_frame(self):
-        # CTkFrame doesn't have 'text' for a border title like ttk.LabelFrame
-        # So we create a Frame and add a Label inside to act as the header.
         frame = ctk.CTkFrame(self.root)
         frame.pack(fill="x", padx=10, pady=5)
         
@@ -41,12 +38,13 @@ class PIDControllerGUI:
         lbl_title = ctk.CTkLabel(frame, text="Connection Settings", font=("Roboto", 12, "bold"))
         lbl_title.pack(anchor="w", padx=10, pady=(5, 0))
 
-        # Inner container for the controls to keep them aligned
+        # Inner container for the controls to keep them aligned o the left
         inner_frame = ctk.CTkFrame(frame, fg_color="transparent")
         inner_frame.pack(fill="x", padx=5, pady=5)
 
         ctk.CTkLabel(inner_frame, text="Port:").pack(side="left", padx=5)
         
+        # COM port selection
         self.port_combo = ctk.CTkComboBox(inner_frame, width=150)
         self.port_combo.pack(side="left", padx=5)
         self.refresh_ports()
@@ -60,6 +58,7 @@ class PIDControllerGUI:
         self.status_lbl = ctk.CTkLabel(inner_frame, text="Status: Disconnected", text_color="red")
         self.status_lbl.pack(side="left", padx=10)
 
+        #Waveform generator button
         self.waveformButton = ctk.CTkButton(inner_frame, text="Draw Waveform", command=self.open_waveform_window)
         self.waveformButton.pack(side = "left", padx = 10)
 
@@ -70,8 +69,7 @@ class PIDControllerGUI:
         # Section Title
         ctk.CTkLabel(frame, text="PID Controls", font=("Roboto", 12, "bold")).grid(row=0, column=0, columnspan=10, sticky="w", padx=10, pady=(5,5))
 
-        # Voltage Control
-        # Note: CTk width is in pixels, not characters. Adjusted accordingly.
+        # Voltage Control , CTk width is in pixels, not characters
         ctk.CTkLabel(frame, text="Target Voltage (0-3.3V):").grid(row=1, column=0, padx=5, pady=5)
 
         slider_container = ctk.CTkFrame(frame, fg_color="transparent") #Transparent box that fits both the slider and slider value
@@ -80,16 +78,16 @@ class PIDControllerGUI:
         def slider_event(value):
             self.value_label.configure(text=f"{value:.2f}") #2 DP for voltage setpoint label
 
-        # 1. The Value Label (Packed Top)
+        # The Value Label (Positioned on top of slider container)
         self.value_label = ctk.CTkLabel(slider_container, text="0.96", font=("Roboto", 14, "bold"))
         self.value_label.pack(side="top", pady=(0, 2))
 
-        # 2. The Slider (Packed Bottom)
+        # The Slider (Positioned on bottom of slider container)
         self.ent_voltage = ctk.CTkSlider(slider_container, from_=0, to=3.3, command=slider_event)
-        self.ent_voltage.set(0.96) # Ensure slider and label match start values
+        self.ent_voltage.set(0.96) 
         self.ent_voltage.pack(side="top")
         
-        ctk.CTkButton(frame, text="Set Target", width=100, command=self.send_setpoint).grid(row=1, column=2, padx=5, pady=5)
+        ctk.CTkButton(frame, text="Set Target", width=100, command=self.send_setpoint).grid(row=1, column=2, padx=5, pady=5) #Sends data only when button pressed
         
         # PID Constants
         ctk.CTkLabel(frame, text="Kp:").grid(row=1, column=3, padx=5)
@@ -107,9 +105,7 @@ class PIDControllerGUI:
         self.ent_kd.insert(0, "0.02")
         self.ent_kd.grid(row=1, column=8, padx=5)
 
-        ctk.CTkButton(frame, text="Update Gains", width=100, command=self.send_gains).grid(row=1, column=9, padx=10)
-
-        
+        ctk.CTkButton(frame, text="Update Gains", width=100, command=self.send_gains).grid(row=1, column=9, padx=10) #Sends data only when button pressed
 
 
     def open_waveform_window(self):
@@ -132,8 +128,6 @@ class PIDControllerGUI:
         self.lbl_voltage.pack(anchor="center", pady=5)
 
         # Canvas for Graphing
-        # Note: CustomTkinter does not have a Canvas widget, but works perfectly with the standard tk.Canvas
-        # We set highlightthickness=0 to remove the ugly white border default in tkinter
         self.canvas = tk.Canvas(frame, bg="black", height=300, highlightthickness=0)
         self.canvas.pack(fill="both", expand=True, padx=10, pady=10)
         
@@ -141,12 +135,11 @@ class PIDControllerGUI:
 
     def refresh_ports(self):
         ports = [port.device for port in serial.tools.list_ports.comports()]
-        # CTkComboBox uses .configure(values=...) instead of dict assignment
         self.port_combo.configure(values=ports)
         if ports:
             self.port_combo.set(ports[0])
 
-    def toggle_connection(self):
+    def toggle_connection(self): # Connection UI, connect when its disconnected
         if not self.is_connected:
             try:
                 port = self.port_combo.get()
@@ -163,50 +156,50 @@ class PIDControllerGUI:
             self.btn_connect.configure(text="Connect", fg_color=["#3B8ED0", "#1F6AA5"], hover_color=["#36719F", "#144870"]) # Reset to default blue
             self.status_lbl.configure(text="Status: Disconnected", text_color="red")
 
-    def _read_serial(self):
+    def _read_serial(self):#Format of data Time|Voltage|PWM
         if self.is_connected and self.serial_port and self.serial_port.in_waiting:
             try:
-                line = self.serial_port.readline().decode('utf-8').strip()
+                line = self.serial_port.readline().decode('utf-8').strip() #ASCII from buffer
                 parts = line.split('|')
-                if len(parts) >= 2: 
+                if len(parts) >= 2: #Expects at least time and voltage
                     voltage_str = parts[1]
                     try:
                         voltage = float(voltage_str)
                         self.update_graph(voltage)
-                        self.lbl_voltage.configure(text=f"Current Voltage: {voltage:.2f} V")
+                        self.lbl_voltage.configure(text=f"Current Voltage: {voltage:.2f} V") #Update voltage label to display current value
                     except ValueError:
                         pass
             except Exception:
                 pass
         
-        self.root.after(10, self._read_serial)
+        self.root.after(10, self._read_serial) #Calls itself again after 10ms
 
     def update_graph(self, new_val):
-        self.data_buffer.append(new_val)
-        self.canvas.delete("all")
+        self.data_buffer.append(new_val) #add new voltage value, pushes one out
+        self.canvas.delete("all") #Clear previous frame
         
         w = self.canvas.winfo_width()
         h = self.canvas.winfo_height()
         
         max_v = 3.3
         
-        if len(self.data_buffer) > 1:
+        if len(self.data_buffer) > 1: #Check if there are at least two points to draw graph
             points = []
             num_points = len(self.data_buffer)
-            dx = w / max(num_points - 1, 1)
+            dx = w / max(num_points - 1, 1) #X dimension of each segment between points 
             
-            for i, val in enumerate(self.data_buffer):
+            for i, val in enumerate(self.data_buffer): #Give each point a new x and y dimension
                 x = i * dx
                 y = h - ((val / max_v) * h)
                 points.extend([x, y])
             
-            # Using standard tkinter line creation
+            # Standard tkinter line creation
             self.canvas.create_line(points, fill="#00ff00", width=2)
             
-            try:
+            try: # Preview setpoint voltage 
                 sp_v = self.ent_voltage.get()
                 y_sp = h - ((sp_v / max_v) * h)
-                self.canvas.create_line(0, y_sp, w, y_sp, fill="red", dash=(4, 4))
+                self.canvas.create_line(0, y_sp, w, y_sp, fill="red", dash=(4, 4)) # Dashed line
             except:
                 pass
 
